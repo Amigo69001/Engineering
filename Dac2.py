@@ -30,9 +30,15 @@ class R2R_DAC:
 
 if __name__ == "__main__":
     try:
-        dac = R2R_DAC([16, 20, 21, 25, 26, 17, 27, 22], 3.183, True)
+        dac = R2R_DAC([16, 20, 21, 25, 26, 17, 27, 22], 3.17, True)
 
         while True:
             try:
                 voltage = float(input("Введите напряжение в вольтах: "))
                 dac.set_voltage(voltage)
+        
+            except ValueError:
+                print("Вы ввели не число \n")
+        
+    finally:
+        dac.deinit()
