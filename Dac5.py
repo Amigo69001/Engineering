@@ -41,7 +41,7 @@ if __name__ == "__main__":
     try:
         dac = R2R_DAC(dac_bits, dinamic_range, True)
         sig_freq = 10
-        sampl_freq = 1000
+        sampl_freq = 50
         max_U = 1
         t = 0
 
