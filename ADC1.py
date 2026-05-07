@@ -2,98 +2,75 @@ import RPi.GPIO as GPIO
 import time
 
 class R2R_ADC:
-    
-    def __init__(self, dynamic_range, compare_time=0.01, verbose=False):
-    
+    def __init__(self, dynamic_range, compare_range = 0.01, verbose = False):
         self.dynamic_range = dynamic_range
         self.verbose = verbose
-        self.compare_time = compare_time
+        self.compare_time = compare_range
 
-        
         self.bits_gpio = [26, 20, 19, 16, 13, 12, 25, 11]
-
         self.comp_gpio = 21
 
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.bits_gpio, GPIO.OUT, initial=GPIO.LOW)
-        # Исправление: добавляем встроенную подтяжку вверх для пина компаратора
-        GPIO.setup(self.comp_gpio, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(self.bits_gpio, GPIO.OUT, initial = 0)
+        GPIO.setup(self.comp_gpio, GPIO.IN)
+
+    def deinit(self):
+        GPIO.output(self.bits_gpio, 0)
+        GPIO.cleanup()
 
     def number_to_dac(self, number):
-        
-        if self.verbose:
-            print(f"Подача числа {number} на ЦАП")
-        for i, pin in enumerate(self.bits_gpio):
-            bit = (number >> i) & 1
-            GPIO.output(pin, bit)
+        bits = [int(element) for element in bin(number)[2:].zfill(8)]
+        GPIO.output(self.bits_gpio, bits)
 
     def sequential_counting_adc(self):
-       
-        for code in range(256):
-            self.number_to_dac(code)
+        for value in range(256):
+            R2R_ADC.number_to_dac(self, value)
             time.sleep(self.compare_time)
-            if GPIO.input(self.comp_gpio) == 1:
-                if self.verbose:
-                    print(f"Превышение достигнуто при коде {code}")
-                return code
+            if (GPIO.input(self.comp_gpio) ==  1):
+                return value
         return 255
 
     def get_sc_voltage(self):
-        
-        code = self.sequential_counting_adc()
-        voltage = code * self.dynamic_range / 255.0
-        if self.verbose:
-            print(f"[SC] Код: {code}, напряжение: {voltage:.3f} В")
-        return voltage
+        value = R2R_ADC.sequential_counting_adc(self)
+        return (value/255) * self.dynamic_range
 
     def successive_approximation_adc(self):
-        
-        code = 0
-        for bit in range(7, -1, -1):
-            test_code = code | (1 << bit)
-            self.number_to_dac(test_code)
+        right = 256
+        left  = 0
+        value = 0
+        while ((right - left) > 1):
+            value = (right + left) / 2
+            R2R_ADC.number_to_dac(self, value)
             time.sleep(self.compare_time)
-
-            if GPIO.input(self.comp_gpio) == 0:
-                code = test_code
-
-        if self.verbose:
-            print(f"[SAR] Найден код: {code}")
-        return code
+            if (GPIO.input(self.comp_gpio) == 1):
+                right = value
+            else:
+                left = value
+        return value
 
     def get_sar_voltage(self):
-        code = self.successive_approximation_adc()
-        voltage = code * self.dynamic_range / 255.0
-        if self.verbose:
-            print(f"[SAR] Код: {code}, напряжение: {voltage:.3f} В")
-        return voltage
+        value = self.successive_approximation_adc(self)
+        return (value/255) * self.dynamic_range
 
-    def cleanup(self):
-        self.number_to_dac(0)
-        GPIO.cleanup(self.bits_gpio + [self.comp_gpio])
-        if self.verbose:
-            print("GPIO очищены")
 
-    def __del__(self):
-        self.cleanup()
 
+
+
+# if __name__ == "__main__":
+    # try:
+        # adc = R2R_ADC(3.3, 0.01)
+        # while True:
+            # voltage = adc.get_sc_voltage()
+            # print(f"Напряжение: {voltage}")
+    # finally:
+        # adc.deinit()
 
 if __name__ == "__main__":
-    DYNAMIC_RANGE = 3.30
-
     try:
-        adc = R2R_ADC(dynamic_range=DYNAMIC_RANGE, compare_time=0.01, verbose=False)
-        print("Начинаем измерение напряжения методом последовательного приближения (SAR).")
-        print("Для выхода нажмите Ctrl+C\n")
-
+        adc = R2R_ADC(3.3, 0.01)
         while True:
-            voltage = adc.get_sar_voltage()
-            print(f"Напряжение (SAR): {voltage:.3f} В")
-            time.sleep(0.2)
-
-    except KeyboardInterrupt:
-        print("\nПрерывание пользователем")
+            voltage = adc.get_sar_voltage(adc)
+            print (f"Напряжение: {voltage}")
 
     finally:
-        if 'adc' in locals():
-            adc.cleanup()
+        adc.deinit()
